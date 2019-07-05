@@ -1,0 +1,226 @@
+/*Daniel Belc and Vincent mulvaney
+Fall 2018
+Section 1
+09/11/18
+Description of the code:
+This code uses pushbuttons one and two to count up  or down in two bit binary usign the red and led lEDS
+When s1 is held down the LEDs count up. When pushbutton s2 is held down The LEDs coount down.
+When both buttons are pushed S2 is ignored and the system counter counts up.
+INPUT  VARIABLES: Pushbuttons s1 and s2
+OUTPUT VARIABLES: RED and GREEN LEDs
+*/
+/*Functions
+ * myDelay
+ * oldmyDelay
+ * myLED
+ * BlinkLED
+ * Display
+ */
+//Include required libraries
+#include <msp430.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <EEL4746(1).h>
+//Define constants
+ #define ALL_ON 0
+ #define ALL_OFF 1
+ #define RED_ON 2
+ #define RED_OFF 3
+ #define GREEN_ON 4
+ #define GREEN_OFF 5
+ #define DELAY_FOR_1S 104500 // Value that will yield a 1 second delay
+// define function prototypes
+void myDelay(uint32_t vDelayValue);
+void oldmyDelay(uint32_t vDelayValue);
+void myLED(uint8_t Color);
+void BlinkLED(uint8_t Color);
+void Display(uint8_t vCount);
+extern void EnableTimer4746(uint32_t DelayValue);
+extern void DisableTimer4746();
+//Declare Global Variables
+uint8_t vCount;
+uint8_t vON;
+uint8_t vUPn ;
+uint8_t SLEEP = 0;
+uint32_t DelayValue =104500;
+//Start main
+int main(void)
+{
+  volatile unsigned int i;
+  WDTCTL = WDTPW+WDTHOLD;   // Stop WDT
+  P1DIR |= BIT0;            // OUTPUT RED
+  P4DIR |= BIT7;            // OUTPUT GREEN
+  P1OUT &=~BIT0;    //MAKES SURE RED OFF
+  P4OUT &=~BIT7;    //MAKES SURE green OFF
+  P1DIR &= ~BIT1;   //INPUT S1
+  P2DIR &= ~BIT1;   //INPUT S2
+  P1REN |= BIT1;
+  P2REN |= BIT1;
+  P1OUT |= BIT1;
+  P2OUT |= BIT1;
+  P2IES |= BIT1; //Instructs the port I/O controller to set a bit or flag in another port I/O register called PxIFg
+  P1IES |= BIT1;
+  vON=0;        //Turn design off(0) on(1)
+  vUPn=0;       //Sets initial mode to count up(0) or down(1)
+  vCount=0;     //vCount=0;
+  EnableInterrupts4746(DelayValue,SLEEP);
+  while(1)      // continuous loop
+  {
+      Display(vCount);
+      if((P2IFG & BIT1)  ==BIT1) //see of bit1 in p2ifg register is set
+      {
+          vON =!vON;        //if yes,invert vOn
+          P2IFG &=~BIT1;    //clears flag bit for s1
+          puts("s1 has been pressed");
+      }
+      if((P1IFG & BIT1)==BIT1)
+      {
+          vUPn=!vUPn;       //if yes invert vUPn
+          P1IFG &=~BIT1;    //Clear flag bit for s2
+          puts("s2 has been pressed");
+      }
+  }//end while
+}//end main
+#pragma vector=TIMER0_A0_VECTOR
+__interrupt void Timer0_A0(void) //use two dashes __ in front of interrupt not one
+{
+ Display(vCount);
+ if(vON != 0)  // Design is ON
+ {
+     if(vUPn == 0)// Design is counting UP
+     {
+         switch(vCount)
+         {
+         case 0:
+         {
+             vCount=1;
+             break;
+         }
+         case 1:
+         {
+             vCount=3;
+             break;
+         }
+         case 3:
+         {
+             vCount=2;
+             break;
+         }
+         case 2:
+         {
+             vCount=0;
+             break;
+         }
+     }          //End switch statement
+  }             //End if(vUPn == 0)
+     else       // Design is counting DOWN
+     {
+         switch(vCount)
+         {
+         case 0:
+         {
+             vCount=2;
+             break;
+         }
+         case 1:
+         {
+             vCount=0;
+             break;
+         }
+         case 3:
+         {
+             vCount=1;
+             break;
+         }
+         case 2:
+         {
+             vCount=3;
+             break;
+         }
+         }          //End Switch Statement
+     }             //End else
+ }                 //End if(vON != 0)
+}                  //End the interrupt routine
+//myDelay function
+void myDelay(uint32_t vDelayValue)//timedelay= 10*delayvalue/1.045
+{
+ EnableTimer4746(vDelayValue);  //enable timer
+ while((TA0CTL & BIT0)==0){}    //wait till TAIFG==1
+ DisableTimer4746();            //resets timer flag and turns off the timer
+}
+//End myDelay function
+//Begin myLED function
+void myLED(uint8_t Color)
+{
+    switch(Color)
+    {
+        case ALL_ON:
+            P4OUT |=BIT7;  //GREEN ON
+            P1OUT |=BIT0;  //RED ON
+            break;
+        case ALL_OFF:
+            P4OUT &=~BIT7;  //GREEN OFF
+            P1OUT &=~BIT0;  //RED OFF
+            break;
+        case RED_ON:
+            P1OUT |=BIT0;  //RED ON
+            break;
+        case RED_OFF:
+            P1OUT &=~BIT0;  //RED OFF
+            break;
+        case GREEN_ON :
+            P4OUT |=BIT7;  //GREEN ON
+            break;
+        case GREEN_OFF:
+            P4OUT &=~BIT7;  //GREEN OFF
+            break;
+        default:
+            P4OUT &=~BIT7;  //GREEN OFF
+            P1OUT &=~BIT0;  //RED OFF
+            break;
+    }   //End Switch(Color) statement
+}
+//End MyLED function
+//Begin oldmyDelay function
+void oldmyDelay(uint32_t vDelayValue)//timedelay= 10*delayvalue/1.045
+{
+ volatile uint32_t i=0; // define loop value – must include volatile modifier for CCS C compiler
+ for(i=vDelayValue;i>0;i--);
+}
+//End oldmyDelay function
+//Begin BlinkLED function
+void BlinkLED(uint8_t Color){ // Use Color_ON value
+ myLED(Color);          // Turn on LED based on Color variable
+ myDelay(DELAY_FOR_1S); // Delay_for_1S is a constant
+                        // Turn OFF the same LED
+ myLED(Color+1);        // we designed Color_OFF = Color_ON+1
+ myDelay(DELAY_FOR_1S); // Delay_for_1S is a constant
+}
+//End BlinkLED function
+//Begin Display function
+void Display(uint8_t vCount)
+{
+ uint8_t vTwo;
+ uint8_t vOne;
+ vTwo = vCount / 2 ; //integer division
+ vOne = vCount % 2 ; // modulus division
+ switch(vTwo)
+ {
+     case 1:
+         myLED(RED_ON); // Turns RED LED ON
+         break;
+     default:
+         myLED(RED_OFF); // Turns RED LED OFF
+         break;
+ }
+ switch(vOne)
+ {
+     case 1:
+         myLED(GREEN_ON); // Turns GREEN LED ON
+         break;
+     default:
+         myLED(GREEN_OFF); // Turns GREEN LED OFF
+         break;
+ }
+}
+//End Display function
